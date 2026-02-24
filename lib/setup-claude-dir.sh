@@ -36,7 +36,14 @@ setup_claude_dir() {
     local claude_dir="${project_dir}/.claude"
     local aeef_dir="${project_dir}/.aeef"
     local role_src="${aeef_root}/roles/${role}"
+    local role_pack_dir="${AEEF_ROLE_PACK_DIR:-}"
     local hooks_src="${aeef_root}/hooks"
+
+    # Optional role-pack override/fallback for enterprise roles.
+    if [[ -n "$role_pack_dir" ]] && [[ -d "${role_pack_dir}/roles/${role}" ]]; then
+        role_src="${role_pack_dir}/roles/${role}"
+        info "Using role-pack profile for '${role}' from ${role_src}"
+    fi
 
     # ── Clean up previous .claude/ directory ──────────────────────────────────
     if [[ -d "$claude_dir" ]]; then

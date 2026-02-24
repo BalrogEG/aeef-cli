@@ -6,7 +6,7 @@ set -euo pipefail
 # Orchestrates Claude Code agent roles via Git branches.
 # ──────────────────────────────────────────────────────────────────────────────
 
-AEEF_VERSION="0.1.0"
+AEEF_VERSION="0.1.1"
 AEEF_ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
 
 # ── Color helpers ─────────────────────────────────────────────────────────────
@@ -38,6 +38,7 @@ MAX_TURNS="25"
 BUDGET="5"
 CI_MODE=false
 INITIAL_PROMPT=""
+ROLE_PACK_DIR="${AEEF_ROLE_PACK_DIR:-}"
 
 # ── Usage / help ──────────────────────────────────────────────────────────────
 usage() {
@@ -55,7 +56,7 @@ ${BOLD}COMMANDS${RESET}
     help                   Show this help message
 
 ${BOLD}REQUIRED${RESET}
-    --role <role>           Agent role: product | architect | developer | qc
+    --role <role>           Agent role (built-in: product | architect | developer | qc; more via role pack)
 
 ${BOLD}OPTIONS${RESET}
     --backend-cmd <cmd>     Backend CLI command (default: claude)
@@ -63,6 +64,7 @@ ${BOLD}OPTIONS${RESET}
     --model <model>         Model to use (default: sonnet)
     --max-turns <n>         Max conversation turns in CI mode (default: 25)
     --budget <usd>          Max budget in USD for CI mode (default: 5)
+    --role-pack-dir <dir>   Optional enterprise role-pack directory
     --ci                    Run in non-interactive CI mode
     --prompt <text>         Initial prompt to send to the agent
     --help                  Show this help message
@@ -113,11 +115,12 @@ bootstrap_usage() {
 ${BOLD}aeef bootstrap${RESET} — Apply AEEF hooks/rules/skills to a git repository
 
 USAGE
-    aeef bootstrap --project <dir> [--role <role>] [--with-branches] [--commit]
+    aeef bootstrap --project <dir> [--role <role>] [--role-pack-dir <dir>] [--with-branches] [--commit]
 
 OPTIONS
     --project <dir>        Target git repository (required)
     --role <role>          Initial role to install (default: product)
+    --role-pack-dir <dir>  Optional enterprise role-pack directory
     --with-branches        Also create/sync the role branch workflow
     --commit               Commit the installed .claude/ and .aeef/.gitignore
     --help                 Show this help message
@@ -186,6 +189,20 @@ EOF
     exit 0
 }
 
+load_role_pack_if_configured() {
+    local pack_dir="${ROLE_PACK_DIR:-${AEEF_ROLE_PACK_DIR:-}}"
+    [[ -n "$pack_dir" ]] || return 0
+
+    pack_dir="$(cd "$pack_dir" && pwd)" || die "Role pack directory does not exist: $pack_dir"
+    local map_file="${pack_dir}/roles-map.sh"
+    [[ -f "$map_file" ]] || die "Role pack mapping file not found: $map_file"
+
+    export AEEF_ROLE_PACK_DIR="$pack_dir"
+    # shellcheck source=/dev/null
+    source "$map_file"
+    info "Loaded role pack: ${AEEF_ROLE_PACK_DIR}"
+}
+
 bootstrap_cmd() {
     local role="product"
     local project_dir=""
@@ -200,6 +217,10 @@ bootstrap_cmd() {
                 ;;
             --role)
                 role="${2:?'--role requires a value'}"
+                shift 2
+                ;;
+            --role-pack-dir)
+                ROLE_PACK_DIR="${2:?'--role-pack-dir requires a value'}"
                 shift 2
                 ;;
             --with-branches)
@@ -220,7 +241,8 @@ bootstrap_cmd() {
     done
 
     [[ -n "$project_dir" ]] || die "bootstrap requires --project <dir>"
-    validate_role "$role" || die "Invalid role '$role'. Valid roles: product, architect, developer, qc"
+    load_role_pack_if_configured
+    validate_role "$role" || die "Invalid role '$role'. Valid roles: $(IFS=', '; echo "${VALID_ROLES[*]}")"
 
     project_dir="$(cd "$project_dir" && pwd)" || die "Project directory does not exist: $project_dir"
     [[ -d "$project_dir/.git" ]] || die "Not a git repository: $project_dir"
@@ -271,6 +293,7 @@ if [[ "${1:-}" != --* ]]; then
             doctor_cmd "$@"
             ;;
         roles)
+            load_role_pack_if_configured
             list_roles
             exit 0
             ;;
@@ -309,6 +332,10 @@ while [[ $# -gt 0 ]]; do
             BUDGET="${2:?'--budget requires a value'}"
             shift 2
             ;;
+        --role-pack-dir)
+            ROLE_PACK_DIR="${2:?'--role-pack-dir requires a value'}"
+            shift 2
+            ;;
         --ci)
             CI_MODE=true
             shift
@@ -331,8 +358,9 @@ while [[ $# -gt 0 ]]; do
 done
 
 # ── Validate inputs ──────────────────────────────────────────────────────────
+load_role_pack_if_configured
 [[ -z "$ROLE" ]] && die "Missing required flag: --role (see --help)"
-validate_role "$ROLE" || die "Invalid role '$ROLE'. Valid roles: product, architect, developer, qc"
+validate_role "$ROLE" || die "Invalid role '$ROLE'. Valid roles: $(IFS=', '; echo "${VALID_ROLES[*]}")"
 
 PROJECT_DIR="$(cd "$PROJECT_DIR" && pwd)" || die "Project directory does not exist: $PROJECT_DIR"
 [[ -d "$PROJECT_DIR/.git" ]] || die "Not a git repository: $PROJECT_DIR"

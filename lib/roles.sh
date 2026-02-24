@@ -56,7 +56,21 @@ ROLE_DISPLAY_NAME[developer]="Developer Agent"
 ROLE_DISPLAY_NAME[qc]="QC Agent"
 
 # ── Valid roles list ─────────────────────────────────────────────────────────
-readonly VALID_ROLES=("product" "architect" "developer" "qc")
+# Mutable so optional role packs can append enterprise roles.
+VALID_ROLES=("product" "architect" "developer" "qc")
+
+add_valid_role() {
+    local role="${1:-}"
+    [[ -n "$role" ]] || return 1
+
+    local existing
+    for existing in "${VALID_ROLES[@]}"; do
+        [[ "$existing" == "$role" ]] && return 0
+    done
+
+    VALID_ROLES+=("$role")
+    return 0
+}
 
 # ──────────────────────────────────────────────────────────────────────────────
 # validate_role — Check whether a given role name is valid.

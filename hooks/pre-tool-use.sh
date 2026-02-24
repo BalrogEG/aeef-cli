@@ -250,14 +250,172 @@ enforce_qc() {
 }
 
 ###############################################################################
+# Role: scrum / devmgr / executive
+# - Planning/reporting roles: no source code writes, no Bash by default
+###############################################################################
+
+enforce_reporting_role() {
+  local role_name="$1"
+
+  if [[ "$TOOL_NAME" == "Bash" ]]; then
+    block "[${role_name}] Bash is not permitted for this role. Use Read/Grep/Write/Edit for planning and reporting artifacts only."
+  fi
+
+  if [[ "$TOOL_NAME" == "Write" ]] || [[ "$TOOL_NAME" == "Edit" ]]; then
+    local fp
+    fp="$(get_file_path)"
+    [[ -z "$fp" ]] && allow
+    if is_source_code_path "$fp"; then
+      block "[${role_name}] Writing to source code files is not permitted for this role. File: $fp"
+    fi
+    if echo "$fp" | grep -qE '(^|/)(secrets|infrastructure)/'; then
+      block "[${role_name}] Writing to restricted paths is not permitted. File: $fp"
+    fi
+    allow
+  fi
+
+  allow
+}
+
+###############################################################################
+# Role: qa (enterprise role-pack)
+# - Same enforcement as qc (read-only, test/lint execution)
+###############################################################################
+
+enforce_qa() {
+  enforce_qc
+}
+
+###############################################################################
+# Role: security / compliance
+###############################################################################
+
+enforce_security() {
+  if [[ "$TOOL_NAME" == "Write" ]] || [[ "$TOOL_NAME" == "Edit" ]]; then
+    local fp
+    fp="$(get_file_path)"
+    [[ -z "$fp" ]] && allow
+    if is_source_code_path "$fp"; then
+      block "[security] Editing source code is restricted. Produce findings/reports or scoped remediation instructions."
+    fi
+    if echo "$fp" | grep -qE '(^|/)secrets/|(^|/)\\.env'; then
+      block "[security] Writing secrets or .env files is blocked."
+    fi
+    allow
+  fi
+
+  if [[ "$TOOL_NAME" == "Bash" ]]; then
+    local cmd
+    cmd="$(get_command)"
+    [[ -z "$cmd" ]] && allow
+    if echo "$cmd" | grep -qiE '(semgrep|bandit|govulncheck|npm audit|pip-audit|trivy|grype|syft|license-checker|go-licenses|git diff|git show|git status|jq|cat)'; then
+      allow
+    fi
+    block "[security] Bash is restricted to scan, audit, and review commands. Command: ${cmd:0:120}"
+  fi
+
+  allow
+}
+
+enforce_compliance() {
+  if [[ "$TOOL_NAME" == "Bash" ]]; then
+    local cmd
+    cmd="$(get_command)"
+    [[ -z "$cmd" ]] && allow
+    if echo "$cmd" | grep -qiE '(jq|git diff|git show|git status|cat|ls)'; then
+      allow
+    fi
+    block "[compliance] Bash is restricted to evidence/review commands. Command: ${cmd:0:120}"
+  fi
+
+  if [[ "$TOOL_NAME" == "Write" ]] || [[ "$TOOL_NAME" == "Edit" ]]; then
+    local fp
+    fp="$(get_file_path)"
+    [[ -z "$fp" ]] && allow
+    if is_source_code_path "$fp"; then
+      block "[compliance] Editing source code is not permitted."
+    fi
+    if echo "$fp" | grep -qE '(^|/)infrastructure/|(^|/)secrets/'; then
+      block "[compliance] Editing infrastructure or secrets is not permitted."
+    fi
+    allow
+  fi
+
+  allow
+}
+
+###############################################################################
+# Role: platform / ops
+###############################################################################
+
+enforce_platform() {
+  if [[ "$TOOL_NAME" == "Write" ]] || [[ "$TOOL_NAME" == "Edit" ]]; then
+    local fp
+    fp="$(get_file_path)"
+    [[ -z "$fp" ]] && allow
+    if is_source_code_path "$fp"; then
+      block "[platform] Editing application source code is not permitted. Limit changes to deployment/infrastructure artifacts."
+    fi
+    allow
+  fi
+
+  if [[ "$TOOL_NAME" == "Bash" ]]; then
+    local cmd
+    cmd="$(get_command)"
+    [[ -z "$cmd" ]] && allow
+    if echo "$cmd" | grep -qiE '^(docker|docker compose|docker-compose|kubectl|helm|terraform|aws|gcloud|az|gh|kustomize|jq|yq)'; then
+      allow
+    fi
+    if echo "$cmd" | grep -qiE '(kubectl|helm|terraform|docker|kustomize|gh workflow)'; then
+      allow
+    fi
+    block "[platform] Bash is restricted to infrastructure and deployment commands. Command: ${cmd:0:120}"
+  fi
+
+  allow
+}
+
+enforce_ops() {
+  if [[ "$TOOL_NAME" == "Write" ]] || [[ "$TOOL_NAME" == "Edit" ]]; then
+    local fp
+    fp="$(get_file_path)"
+    [[ -z "$fp" ]] && allow
+    if is_source_code_path "$fp"; then
+      block "[ops] Editing application source code is not permitted during operations."
+    fi
+    allow
+  fi
+
+  if [[ "$TOOL_NAME" == "Bash" ]]; then
+    local cmd
+    cmd="$(get_command)"
+    [[ -z "$cmd" ]] && allow
+    if echo "$cmd" | grep -qiE '(docker|docker compose|kubectl|helm|curl|jq|journalctl|systemctl|git diff|git show|gh|./shared/scripts/|shared/scripts/)'; then
+      allow
+    fi
+    block "[ops] Bash is restricted to monitoring, incident response, and deployment runtime commands. Command: ${cmd:0:120}"
+  fi
+
+  allow
+}
+
+###############################################################################
 # Dispatch by role
 ###############################################################################
 
 case "$ROLE" in
   product)   enforce_product ;;
+  scrum)     enforce_reporting_role "scrum" ;;
   architect) enforce_architect ;;
   developer) enforce_developer ;;
   qc)        enforce_qc ;;
+  qa)        enforce_qa ;;
+  security)  enforce_security ;;
+  compliance) enforce_compliance ;;
+  platform)  enforce_platform ;;
+  devmgr)    enforce_reporting_role "devmgr" ;;
+  ops)       enforce_ops ;;
+  executive) enforce_reporting_role "executive" ;;
   *)
     # Unknown role — allow but warn
     echo "[aeef] Warning: unknown role '$ROLE', no contract enforcement applied." >&2

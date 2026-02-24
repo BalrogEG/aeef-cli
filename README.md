@@ -110,7 +110,7 @@ Use the same `aeef-cli` wrapper for both scenarios:
 Recommended approach for the 11-agent path:
 
 1. Keep `aeef-cli` as the shared CLI/wrapper project
-2. Maintain an optional role-pack project (public or private) with additional `roles/<name>/` profiles
+2. Maintain an optional role-pack project (public or private) with additional `roles/<name>/` profiles (for example, `aeef-enterprise-role-pack`)
 3. Reuse the Production tier agent contracts/prompts/handoffs as the source of truth for enterprise roles
 
 This avoids maintaining a separate CLI implementation while still supporting the full orchestration model.
@@ -132,6 +132,7 @@ ln -s "$(pwd)/bin/aeef" ~/.local/bin/aeef
 |---------|---------|
 | `aeef doctor --project ./repo` | Check dependencies and repo readiness |
 | `aeef bootstrap --project ./repo --role product` | Apply hooks/rules/skills into a repo |
+| `aeef bootstrap --project ./repo --role scrum --role-pack-dir /path/to/aeef-enterprise-role-pack` | Bootstrap an enterprise role profile |
 | `aeef roles` | List role-to-branch routing |
 | `aeef --role <role> --project ./repo` | Run a role agent workflow |
 
@@ -160,6 +161,7 @@ aeef --role <role> [OPTIONS]
 | `--model`         | `sonnet`  | Model to use (sonnet, opus, etc.)        |
 | `--max-turns`     | `25`      | Max conversation turns (CI mode)         |
 | `--budget`        | `5`       | Max budget in USD (CI mode)              |
+| `--role-pack-dir` | none      | Load extra role profiles from a role-pack directory |
 | `--ci`            | off       | Non-interactive CI mode                  |
 | `--prompt`        | none      | Initial prompt for the agent             |
 | `--help`          |           | Show usage information                   |
@@ -211,6 +213,15 @@ aeef --role qc \
 The QC Agent has read-only access (no Write or Edit tools) and can run test
 commands (npm test, pytest, go test). On success, it cleans up all AEEF
 artifacts (.claude/ and .aeef/ directories) from the branch.
+
+#### Enterprise role-pack example (same CLI core)
+
+```bash
+export AEEF_ROLE_PACK_DIR=/path/to/aeef-enterprise-role-pack
+aeef --role qa --project ./my-app
+```
+
+This loads additional roles (for example `scrum`, `qa`, `security`, `compliance`, `platform`, `devmgr`, `ops`, `executive`) without changing the CLI binary.
 
 ## How It Works
 
