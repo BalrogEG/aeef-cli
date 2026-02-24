@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aeef.ai/schemas/handoff-artifact.schema.json",
+  "title": "AEEF Handoff Artifact",
+  "type": "object",
+  "required": ["handoff_id", "source_agent", "target_agent", "timestamp", "change_summary", "evidence"],
+  "properties": {
+    "handoff_id": {"type": "string"},
+    "source_agent": {"type": "string"},
+    "target_agent": {"type": "string"},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "change_summary": {
+      "type": "object",
+      "required": ["what_changed", "files_touched", "rationale"],
+      "properties": {
+        "what_changed": {"type": "string"},
+        "files_touched": {"type": "array", "items": {"type": "string"}},
+        "rationale": {"type": "string"}
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "required": ["prompt_reference", "contract_version"],
+      "properties": {
+        "prompt_reference": {"type": "string"},
+        "contract_version": {"type": "string"},
+        "test_evidence": {"type": "string"},
+        "security_scan_result": {"type": "string", "enum": ["pass", "fail", "not_run"]}
+      }
+    },
+    "risks": {
+      "type": "object",
+      "properties": {
+        "known_risks": {"type": "array", "items": {"type": "string"}},
+        "assumptions": {"type": "array", "items": {"type": "string"}},
+        "open_questions": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "decision_request": {"type": "string"}
+  }
+}

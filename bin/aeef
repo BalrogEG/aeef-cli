@@ -1,0 +1,473 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ──────────────────────────────────────────────────────────────────────────────
+# aeef — AI Engineering Excellence Framework CLI
+# Orchestrates Claude Code agent roles via Git branches.
+# ──────────────────────────────────────────────────────────────────────────────
+
+AEEF_VERSION="0.1.0"
+AEEF_ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+
+# ── Color helpers ─────────────────────────────────────────────────────────────
+readonly RED='\033[0;31m'
+readonly GREEN='\033[0;32m'
+readonly BLUE='\033[0;34m'
+readonly YELLOW='\033[0;33m'
+readonly BOLD='\033[1m'
+readonly RESET='\033[0m'
+
+info()    { printf "${BLUE}[aeef]${RESET} %s\n" "$*"; }
+success() { printf "${GREEN}[aeef]${RESET} %s\n" "$*"; }
+warn()    { printf "${YELLOW}[aeef]${RESET} %s\n" "$*" >&2; }
+error()   { printf "${RED}[aeef]${RESET} %s\n" "$*" >&2; }
+die()     { error "$@"; exit 1; }
+
+# ── Source libraries ──────────────────────────────────────────────────────────
+source "${AEEF_ROOT}/lib/roles.sh"
+source "${AEEF_ROOT}/lib/git-workflow.sh"
+source "${AEEF_ROOT}/lib/setup-claude-dir.sh"
+source "${AEEF_ROOT}/lib/cleanup.sh"
+
+# ── Defaults ──────────────────────────────────────────────────────────────────
+ROLE=""
+BACKEND_CMD="claude"
+PROJECT_DIR="."
+MODEL="sonnet"
+MAX_TURNS="25"
+BUDGET="5"
+CI_MODE=false
+INITIAL_PROMPT=""
+
+# ── Usage / help ──────────────────────────────────────────────────────────────
+usage() {
+    cat <<EOF
+${BOLD}aeef${RESET} v${AEEF_VERSION} — AI Engineering Excellence Framework CLI
+
+${BOLD}USAGE${RESET}
+    aeef <command> [OPTIONS]
+    aeef --role <role> [OPTIONS]
+
+${BOLD}COMMANDS${RESET}
+    bootstrap              Copy AEEF hooks/rules/skills into a target git repo
+    doctor                 Check dependencies and project readiness
+    roles                  List available roles and branch routing
+    help                   Show this help message
+
+${BOLD}REQUIRED${RESET}
+    --role <role>           Agent role: product | architect | developer | qc
+
+${BOLD}OPTIONS${RESET}
+    --backend-cmd <cmd>     Backend CLI command (default: claude)
+    --project <dir>         Project directory (default: .)
+    --model <model>         Model to use (default: sonnet)
+    --max-turns <n>         Max conversation turns in CI mode (default: 25)
+    --budget <usd>          Max budget in USD for CI mode (default: 5)
+    --ci                    Run in non-interactive CI mode
+    --prompt <text>         Initial prompt to send to the agent
+    --help                  Show this help message
+    --version               Show version
+
+${BOLD}EXAMPLES${RESET}
+    # Bootstrap a repo with product role hooks/config
+    aeef bootstrap --project ./my-app --role product
+
+    # Validate environment before first run
+    aeef doctor --project ./my-app
+
+    # Interactive product agent session
+    aeef --role product --project ./my-app
+
+    # Architect agent with custom model
+    aeef --role architect --model opus --project ./my-app
+
+    # Developer agent in CI mode with a prompt
+    aeef --role developer --ci --prompt "Implement the auth service" \\
+         --max-turns 30 --budget 10
+
+    # QC agent in CI mode
+    aeef --role qc --ci --prompt "Run full test suite and validate contracts"
+
+${BOLD}WORKFLOW${RESET}
+    1. Validates the role and checks out the role-specific branch
+    2. Merges upstream changes into the role branch
+    3. Sets up .claude/ directory with role-specific rules, skills, and hooks
+    4. Spawns Claude Code with role-appropriate tool permissions
+    5. On success: commits changes and creates a PR to the downstream branch
+    6. On failure: reverts working tree and suggests fallback options
+    7. QC role: cleans up agent artifacts on success
+
+${BOLD}FIRST-TIME JOURNEY${RESET}
+    1. Clone aeef-cli from GitHub
+    2. Run ./install.sh
+    3. Run: aeef doctor --project ./your-repo
+    4. Run: aeef bootstrap --project ./your-repo --role product
+    5. Run: aeef --role product --project ./your-repo
+
+EOF
+    exit 0
+}
+
+bootstrap_usage() {
+    cat <<EOF
+${BOLD}aeef bootstrap${RESET} — Apply AEEF hooks/rules/skills to a git repository
+
+USAGE
+    aeef bootstrap --project <dir> [--role <role>] [--with-branches] [--commit]
+
+OPTIONS
+    --project <dir>        Target git repository (required)
+    --role <role>          Initial role to install (default: product)
+    --with-branches        Also create/sync the role branch workflow
+    --commit               Commit the installed .claude/ and .aeef/.gitignore
+    --help                 Show this help message
+EOF
+    exit 0
+}
+
+doctor_cmd() {
+    local project_dir="."
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --project)
+                project_dir="${2:?'--project requires a value'}"
+                shift 2
+                ;;
+            --help|-h)
+                cat <<EOF
+${BOLD}aeef doctor${RESET} — Validate local prerequisites and target repo
+
+USAGE
+    aeef doctor [--project <dir>]
+EOF
+                exit 0
+                ;;
+            *)
+                die "Unknown option for doctor: $1"
+                ;;
+        esac
+    done
+
+    project_dir="$(cd "$project_dir" && pwd)" || die "Project directory does not exist: $project_dir"
+
+    local failed=false
+    local dep
+    for dep in git claude jq gh; do
+        if command -v "$dep" >/dev/null 2>&1; then
+            success "Dependency OK: $dep"
+        else
+            warn "Dependency missing: $dep"
+            [[ "$dep" == "gh" ]] || failed=true
+        fi
+    done
+
+    if [[ -d "$project_dir/.git" ]]; then
+        success "Git repo OK: $project_dir"
+    else
+        error "Not a git repo: $project_dir"
+        failed=true
+    fi
+
+    if [[ -d "$project_dir/.claude/hooks" ]]; then
+        local hook_count
+        hook_count="$(find "$project_dir/.claude/hooks" -type f | wc -l)"
+        success "AEEF hooks installed: ${hook_count} file(s)"
+    else
+        warn "AEEF hooks not installed yet (.claude/hooks missing)"
+    fi
+
+    if [[ "$failed" == true ]]; then
+        die "Doctor checks failed. Install missing dependencies / fix repo setup."
+    fi
+
+    success "Doctor checks passed."
+    info "Next step: aeef bootstrap --project ${project_dir} --role product"
+    exit 0
+}
+
+bootstrap_cmd() {
+    local role="product"
+    local project_dir=""
+    local with_branches=false
+    local do_commit=false
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --project)
+                project_dir="${2:?'--project requires a value'}"
+                shift 2
+                ;;
+            --role)
+                role="${2:?'--role requires a value'}"
+                shift 2
+                ;;
+            --with-branches)
+                with_branches=true
+                shift
+                ;;
+            --commit)
+                do_commit=true
+                shift
+                ;;
+            --help|-h)
+                bootstrap_usage
+                ;;
+            *)
+                die "Unknown option for bootstrap: $1"
+                ;;
+        esac
+    done
+
+    [[ -n "$project_dir" ]] || die "bootstrap requires --project <dir>"
+    validate_role "$role" || die "Invalid role '$role'. Valid roles: product, architect, developer, qc"
+
+    project_dir="$(cd "$project_dir" && pwd)" || die "Project directory does not exist: $project_dir"
+    [[ -d "$project_dir/.git" ]] || die "Not a git repository: $project_dir"
+
+    export AEEF_RUN_ID
+    AEEF_RUN_ID="$(aeef_run_id "$role")"
+
+    info "Bootstrapping AEEF wrapper into: $project_dir"
+    info "Role profile: ${ROLE_DISPLAY_NAME[$role]}"
+
+    pushd "$project_dir" >/dev/null
+    if [[ "$with_branches" == true ]]; then
+        info "Creating/syncing AEEF role branch '${ROLE_BRANCH[$role]}'..."
+        aeef_ensure_branch "$role" || die "Failed to prepare role branch"
+    fi
+
+    setup_claude_dir "$role" "$project_dir"
+    chmod +x "$project_dir"/.claude/hooks/*.sh 2>/dev/null || true
+
+    if [[ "$do_commit" == true ]]; then
+        git add .claude .aeef/.gitignore
+        git commit -m "chore(aeef): bootstrap ${role} wrapper hooks and contracts" || true
+    fi
+    popd >/dev/null
+
+    success "AEEF wrapper applied."
+    info "Next steps:"
+    info "  1. Review .claude/CLAUDE.md and .claude/rules/contract.md"
+    info "  2. Run: aeef doctor --project ${project_dir}"
+    info "  3. Start role run: aeef --role ${role} --project ${project_dir}"
+    exit 0
+}
+
+# ── Parse arguments ───────────────────────────────────────────────────────────
+if [[ $# -eq 0 ]]; then
+    usage
+fi
+
+# ── Command mode (bootstrap / doctor / roles) ────────────────────────────────
+if [[ "${1:-}" != --* ]]; then
+    case "${1:-}" in
+        bootstrap|init)
+            shift
+            bootstrap_cmd "$@"
+            ;;
+        doctor)
+            shift
+            doctor_cmd "$@"
+            ;;
+        roles)
+            list_roles
+            exit 0
+            ;;
+        help)
+            usage
+            ;;
+        *)
+            die "Unknown command: $1 (see --help)"
+            ;;
+    esac
+fi
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --role)
+            ROLE="${2:?'--role requires a value'}"
+            shift 2
+            ;;
+        --backend-cmd)
+            BACKEND_CMD="${2:?'--backend-cmd requires a value'}"
+            shift 2
+            ;;
+        --project)
+            PROJECT_DIR="${2:?'--project requires a value'}"
+            shift 2
+            ;;
+        --model)
+            MODEL="${2:?'--model requires a value'}"
+            shift 2
+            ;;
+        --max-turns)
+            MAX_TURNS="${2:?'--max-turns requires a value'}"
+            shift 2
+            ;;
+        --budget)
+            BUDGET="${2:?'--budget requires a value'}"
+            shift 2
+            ;;
+        --ci)
+            CI_MODE=true
+            shift
+            ;;
+        --prompt)
+            INITIAL_PROMPT="${2:?'--prompt requires a value'}"
+            shift 2
+            ;;
+        --help|-h)
+            usage
+            ;;
+        --version|-v)
+            echo "aeef v${AEEF_VERSION}"
+            exit 0
+            ;;
+        *)
+            die "Unknown option: $1 (see --help)"
+            ;;
+    esac
+done
+
+# ── Validate inputs ──────────────────────────────────────────────────────────
+[[ -z "$ROLE" ]] && die "Missing required flag: --role (see --help)"
+validate_role "$ROLE" || die "Invalid role '$ROLE'. Valid roles: product, architect, developer, qc"
+
+PROJECT_DIR="$(cd "$PROJECT_DIR" && pwd)" || die "Project directory does not exist: $PROJECT_DIR"
+[[ -d "$PROJECT_DIR/.git" ]] || die "Not a git repository: $PROJECT_DIR"
+
+command -v "$BACKEND_CMD" &>/dev/null || die "Backend command not found: $BACKEND_CMD (is it installed?)"
+command -v gh &>/dev/null || warn "GitHub CLI (gh) not found; PR creation will be skipped"
+command -v jq &>/dev/null || warn "jq not found; JSON output parsing may fail in CI mode"
+
+# ── Generate run ID ──────────────────────────────────────────────────────────
+export AEEF_RUN_ID
+AEEF_RUN_ID="$(aeef_run_id "$ROLE")"
+
+# ── Banner ────────────────────────────────────────────────────────────────────
+printf "\n"
+printf "${BOLD}${BLUE}  ╔══════════════════════════════════════════╗${RESET}\n"
+printf "${BOLD}${BLUE}  ║   AEEF CLI v%-28s ║${RESET}\n" "${AEEF_VERSION}"
+printf "${BOLD}${BLUE}  ╚══════════════════════════════════════════╝${RESET}\n"
+printf "\n"
+info "Role:        ${ROLE_DISPLAY_NAME[$ROLE]}"
+info "Branch:      ${ROLE_BRANCH[$ROLE]}"
+info "Upstream:    ${ROLE_UPSTREAM[$ROLE]}"
+info "Downstream:  ${ROLE_DOWNSTREAM[$ROLE]}"
+info "Project:     ${PROJECT_DIR}"
+info "Model:       ${MODEL}"
+info "Run ID:      ${AEEF_RUN_ID}"
+info "CI mode:     ${CI_MODE}"
+printf "\n"
+
+# ── Step 1: Branch setup ─────────────────────────────────────────────────────
+info "Setting up branch for ${ROLE_DISPLAY_NAME[$ROLE]}..."
+pushd "$PROJECT_DIR" > /dev/null
+
+if ! aeef_ensure_branch "$ROLE"; then
+    die "Branch setup failed. Resolve conflicts and try again."
+fi
+success "Branch '${ROLE_BRANCH[$ROLE]}' is ready."
+
+# ── Step 2: Setup .claude/ directory ──────────────────────────────────────────
+info "Configuring .claude/ directory for role '${ROLE}'..."
+setup_claude_dir "$ROLE" "$PROJECT_DIR"
+success ".claude/ directory configured."
+
+# ── Step 3: Build backend command ─────────────────────────────────────────────
+SYSTEM_PROMPT="You are the AEEF ${ROLE} agent. See .claude/CLAUDE.md for your role context and .claude/rules/contract.md for your constraints."
+
+CMD=("$BACKEND_CMD")
+
+CMD+=("--append-system-prompt" "$SYSTEM_PROMPT")
+CMD+=("--model" "$MODEL")
+
+# Allowed tools
+if [[ -n "${ROLE_ALLOWED_TOOLS[$ROLE]:-}" ]]; then
+    IFS=',' read -ra ALLOWED <<< "${ROLE_ALLOWED_TOOLS[$ROLE]}"
+    for tool in "${ALLOWED[@]}"; do
+        CMD+=("--allowedTools" "$tool")
+    done
+fi
+
+# Disallowed tools
+if [[ -n "${ROLE_DISALLOWED_TOOLS[$ROLE]:-}" ]]; then
+    IFS=',' read -ra DISALLOWED <<< "${ROLE_DISALLOWED_TOOLS[$ROLE]}"
+    for tool in "${DISALLOWED[@]}"; do
+        CMD+=("--disallowedTools" "$tool")
+    done
+fi
+
+# CI mode flags
+if [[ "$CI_MODE" == true ]]; then
+    CMD+=("-p" "--output-format" "json")
+    CMD+=("--max-turns" "$MAX_TURNS")
+    CMD+=("--max-budget-usd" "$BUDGET")
+    CMD+=("--dangerously-skip-permissions")
+fi
+
+# Initial prompt
+if [[ -n "$INITIAL_PROMPT" ]]; then
+    CMD+=("$INITIAL_PROMPT")
+fi
+
+info "Launching ${ROLE_DISPLAY_NAME[$ROLE]}..."
+info "Command: ${CMD[*]}"
+printf "\n"
+
+# ── Step 4: Run the agent ────────────────────────────────────────────────────
+EXIT_CODE=0
+"${CMD[@]}" || EXIT_CODE=$?
+
+printf "\n"
+
+# ── Step 5: Post-run actions ─────────────────────────────────────────────────
+if [[ $EXIT_CODE -eq 0 ]]; then
+    success "${ROLE_DISPLAY_NAME[$ROLE]} completed successfully."
+
+    # Commit changes
+    info "Committing agent changes..."
+    if aeef_commit "$ROLE"; then
+        success "Changes committed."
+    else
+        warn "Nothing to commit (no changes detected)."
+    fi
+
+    # Create PR to downstream
+    info "Creating pull request to downstream..."
+    if command -v gh &>/dev/null; then
+        if aeef_create_pr "$ROLE"; then
+            success "Pull request created."
+        else
+            warn "PR creation skipped or failed. You can create it manually."
+        fi
+    else
+        warn "Skipping PR creation (gh not installed)."
+    fi
+
+    # QC cleanup
+    if [[ "$ROLE" == "qc" ]]; then
+        info "QC role: cleaning up agent artifacts..."
+        aeef_cleanup
+        success "Agent artifacts removed."
+    fi
+else
+    error "${ROLE_DISPLAY_NAME[$ROLE]} failed with exit code ${EXIT_CODE}."
+    info "Reverting working tree..."
+    aeef_revert "$ROLE"
+    warn "Working tree reverted. Check the logs and try again."
+fi
+
+popd > /dev/null
+
+# ── Final summary ─────────────────────────────────────────────────────────────
+printf "\n"
+if [[ $EXIT_CODE -eq 0 ]]; then
+    printf "${GREEN}${BOLD}  Run complete.${RESET} Branch: ${ROLE_BRANCH[$ROLE]}\n"
+else
+    printf "${RED}${BOLD}  Run failed.${RESET} Exit code: ${EXIT_CODE}\n"
+fi
+printf "\n"
+
+exit $EXIT_CODE

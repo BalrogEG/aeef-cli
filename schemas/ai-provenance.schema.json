@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aeef.ai/schemas/ai-provenance.schema.json",
+  "title": "AI Provenance Record",
+  "type": "object",
+  "required": ["provenance"],
+  "properties": {
+    "provenance": {
+      "type": "object",
+      "required": ["id", "generation", "review", "compliance"],
+      "properties": {
+        "id": {"type": "string"},
+        "generation": {
+          "type": "object",
+          "required": ["tool", "model_version", "generation_timestamp", "prompt_template_ref"],
+          "properties": {
+            "tool": {"type": "string"},
+            "model_version": {"type": "string"},
+            "provider": {"type": "string"},
+            "generation_timestamp": {"type": "string", "format": "date-time"},
+            "prompt_template_ref": {"type": "string"},
+            "prompt_hash": {"type": "string"},
+            "session_id": {"type": "string"}
+          }
+        },
+        "review": {
+          "type": "object",
+          "required": ["reviewer", "review_date", "human_modifications", "approval_status"],
+          "properties": {
+            "reviewer": {"type": "string"},
+            "review_date": {"type": "string", "format": "date-time"},
+            "human_modifications": {"type": "string", "enum": ["none", "minor", "moderate", "substantial"]},
+            "approval_status": {"type": "string", "enum": ["approved", "rejected", "escalated"]}
+          }
+        },
+        "compliance": {
+          "type": "object",
+          "required": ["data_classification"],
+          "properties": {
+            "data_classification": {"type": "string", "enum": ["public", "internal", "confidential", "restricted"]},
+            "security_scan_passed": {"type": "boolean"}
+          }
+        }
+      }
+    }
+  }
+}

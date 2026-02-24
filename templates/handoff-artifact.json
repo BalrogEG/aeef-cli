@@ -1,0 +1,23 @@
+{
+  "handoff_id": "",
+  "source_agent": "",
+  "target_agent": "",
+  "timestamp": "",
+  "change_summary": {
+    "what_changed": "",
+    "files_touched": [],
+    "rationale": ""
+  },
+  "evidence": {
+    "prompt_reference": "",
+    "contract_version": "1.0.0",
+    "test_evidence": "",
+    "security_scan_result": "not_run"
+  },
+  "risks": {
+    "known_risks": [],
+    "assumptions": [],
+    "open_questions": []
+  },
+  "decision_request": ""
+}

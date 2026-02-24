@@ -1,0 +1,23 @@
+{
+  "provenance": {
+    "id": "",
+    "generation": {
+      "tool": "claude-code",
+      "model_version": "",
+      "provider": "anthropic",
+      "generation_timestamp": "",
+      "prompt_template_ref": "",
+      "session_id": ""
+    },
+    "review": {
+      "reviewer": "",
+      "review_date": "",
+      "human_modifications": "none",
+      "approval_status": "approved"
+    },
+    "compliance": {
+      "data_classification": "internal",
+      "security_scan_passed": false
+    }
+  }
+}

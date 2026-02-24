@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aeef.ai/schemas/agent-contract.schema.json",
+  "title": "AEEF Agent Contract",
+  "type": "object",
+  "required": ["agent_id", "contract_version", "role_owner", "allowed_inputs", "allowed_outputs", "forbidden_actions", "required_checks"],
+  "properties": {
+    "agent_id": {"type": "string", "pattern": "^[a-z][a-z0-9-]+$"},
+    "contract_version": {"type": "string"},
+    "role_owner": {"type": "string"},
+    "allowed_inputs": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+    "allowed_outputs": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+    "forbidden_actions": {"type": "array", "items": {"type": "string"}},
+    "required_checks": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+    "handoff_required": {"type": "string"},
+    "escalation": {
+      "type": "object",
+      "properties": {
+        "approver_role": {"type": "string"},
+        "triggers": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "trust_level": {"type": "string", "enum": ["supervised", "semi-autonomous", "autonomous"]},
+    "max_token_budget": {"type": "integer"}
+  }
+}
