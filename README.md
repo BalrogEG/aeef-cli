@@ -100,6 +100,21 @@ Notes:
 - Add `--commit` to commit the installed wrapper files before the first agent run.
 - Repeat `aeef bootstrap --role <role>` if you want to switch the local role profile before a run.
 
+## Adoption Profiles (4-Role Baseline vs Full 11-Agent Model)
+
+Use the same `aeef-cli` wrapper for both scenarios:
+
+- **4-role baseline (recommended starting point):** `product`, `architect`, `developer`, `qc`
+- **Full 11-agent rollout (enterprise/production):** extend the same CLI with additional role profiles
+
+Recommended approach for the 11-agent path:
+
+1. Keep `aeef-cli` as the shared CLI/wrapper project
+2. Maintain an optional role-pack project (public or private) with additional `roles/<name>/` profiles
+3. Reuse the Production tier agent contracts/prompts/handoffs as the source of truth for enterprise roles
+
+This avoids maintaining a separate CLI implementation while still supporting the full orchestration model.
+
 ### Manual installation
 
 If you prefer not to use the installer:
@@ -119,6 +134,10 @@ ln -s "$(pwd)/bin/aeef" ~/.local/bin/aeef
 | `aeef bootstrap --project ./repo --role product` | Apply hooks/rules/skills into a repo |
 | `aeef roles` | List role-to-branch routing |
 | `aeef --role <role> --project ./repo` | Run a role agent workflow |
+
+Typical progression:
+- Start with the built-in 4-role baseline for small teams and Quick Start adoption
+- Add more roles only when you need specialization (security/compliance/platform/ops/executive)
 
 ### Basic syntax
 
