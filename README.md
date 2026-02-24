@@ -1,5 +1,7 @@
 # aeef-cli
 
+[![Release](https://img.shields.io/github/v/release/BalrogEG/aeef-cli?display_name=tag)](https://github.com/BalrogEG/aeef-cli/releases)
+
 **CLI wrapper for Claude Code that orchestrates AI agent roles via Git branches.**
 
 aeef-cli implements the AI Engineering Excellence Framework (AEEF) agent pipeline.
