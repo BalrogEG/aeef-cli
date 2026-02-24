@@ -5,7 +5,7 @@ This is the fastest path to apply the AEEF reference wrapper to an existing Git 
 ## 1. Install the wrapper from Git
 
 ```bash
-git clone https://github.com/aeef-ai/aeef-cli.git
+git clone https://github.com/BalrogEG/aeef-cli.git
 cd aeef-cli
 bash install.sh
 ```

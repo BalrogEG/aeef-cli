@@ -57,7 +57,7 @@ downstream through pull requests, and each role has scoped tool permissions.
 
 ```bash
 # Clone the repository
-git clone https://github.com/aeef-ai/aeef-cli.git
+git clone https://github.com/BalrogEG/aeef-cli.git
 cd aeef-cli
 
 # Run the installer
