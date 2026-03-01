@@ -1,0 +1,14 @@
+{
+  "gate_id": "gate-implementation",
+  "stage": "implementation",
+  "criteria_results": [
+    {
+      "criterion": "tests_run",
+      "passed": true,
+      "note": "Found test execution in audit log"
+    }
+  ],
+  "decision": "pass",
+  "required_human_approver": null,
+  "evidence_refs": [".aeef/runs/audit.log", ".aeef/handoffs/handoff.json"]
+}
