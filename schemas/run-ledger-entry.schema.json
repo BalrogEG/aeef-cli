@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aeef.dev/schemas/run-ledger-entry.schema.json",
+  "title": "RunLedgerEntry v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["run_id", "agent_id", "runtime_version", "prompt_ref", "tools_used", "skill_ids", "gate_decisions", "timestamps", "artifact_refs"],
+  "properties": {
+    "run_id": { "type": "string" },
+    "agent_id": { "type": "string" },
+    "runtime_version": { "type": "string" },
+    "prompt_ref": { "type": "string" },
+    "tools_used": { "type": "array", "items": { "type": "string" } },
+    "skill_ids": { "type": "array", "items": { "type": "string" } },
+    "gate_decisions": { "type": "array", "items": { "$ref": "https://aeef.dev/schemas/gate-decision.schema.json" }, "minItems": 1 },
+    "timestamps": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["started_at", "completed_at"],
+      "properties": {
+        "started_at": { "type": "string", "format": "date-time" },
+        "completed_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "artifact_refs": { "type": "array", "items": { "type": "string" }, "minItems": 1 }
+  }
+}

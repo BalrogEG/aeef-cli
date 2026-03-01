@@ -43,8 +43,19 @@ downstream through pull requests, and each role has scoped tool permissions.
 
     ================================================================
     Direction:  main -> product -> architect -> dev -> qc -> main
-    Each arrow = a Pull Request reviewed before merge
+Each arrow = a Pull Request reviewed before merge
 ```
+
+## Adaptation Pack (External Orchestration Ready)
+
+This repo includes an adaptation pack so teams can align `aeef-cli` to external orchestrators while preserving AEEF controls.
+
+- **MCP required** for tool-facing integrations.
+- **A2A progressive** for cross-runtime agent interoperability.
+- Additional schemas: `hook-contract`, `gate-decision`, `run-ledger-entry`.
+- Runtime evidence outputs: `.aeef/runs/audit.log`, `.aeef/runs/run-ledger.jsonl`, `.aeef/runs/gate-decision.json`.
+
+See [ADAPTATION.md](./ADAPTATION.md) for implementation details.
 
 ## Prerequisites
 

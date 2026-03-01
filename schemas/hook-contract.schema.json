@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aeef.dev/schemas/hook-contract.schema.json",
+  "title": "HookContract v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["hook_id", "phase", "inputs", "policy_checks", "outputs", "failure_mode"],
+  "properties": {
+    "hook_id": { "type": "string", "minLength": 3 },
+    "phase": { "type": "string", "enum": ["pre", "post", "stop", "session_start"] },
+    "inputs": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+    "policy_checks": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+    "outputs": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+    "failure_mode": { "type": "string", "enum": ["block", "warn", "escalate"] }
+  }
+}

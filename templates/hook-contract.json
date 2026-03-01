@@ -1,0 +1,8 @@
+{
+  "hook_id": "pre_tool_policy",
+  "phase": "pre",
+  "inputs": ["tool_name", "tool_input", "agent_role"],
+  "policy_checks": ["tool_allowlist", "forbidden_action_check", "data_classification_check"],
+  "outputs": ["permissionDecision", "reason"],
+  "failure_mode": "block"
+}

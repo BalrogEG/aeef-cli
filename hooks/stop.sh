@@ -66,6 +66,20 @@ fi
 ###############################################################################
 
 if [[ "$GATES_MET" == "true" ]]; then
+  mkdir -p .aeef/runs
+  jq -n \
+    --arg role "${ROLE:-unknown}" \
+    --arg now "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" \
+    '{
+      gate_id: "gate-stop",
+      stage: "stop",
+      criteria_results: [
+        {criterion: "handoff_artifact_exists", passed: true, note: "Handoff artifact present"}
+      ],
+      decision: "pass",
+      required_human_approver: (if $role == "qc" then "human-approver" else null end),
+      evidence_refs: [".aeef/handoffs", ".aeef/runs/audit.log", $now]
+    }' > .aeef/runs/gate-decision.json
   # All gates passed — exit cleanly with no output
   exit 0
 else
@@ -80,6 +94,20 @@ else
   jq -n -c \
     --arg msg "$SYSTEM_MSG" \
     '{"continue": true, "systemMessage": $msg}'
+
+  mkdir -p .aeef/runs
+  jq -n \
+    --arg role "${ROLE:-unknown}" \
+    '{
+      gate_id: "gate-stop",
+      stage: "stop",
+      criteria_results: [
+        {criterion: "handoff_artifact_exists", passed: false, note: "Missing handoff and/or test evidence"}
+      ],
+      decision: "fail",
+      required_human_approver: (if $role == "qc" then "human-approver" else null end),
+      evidence_refs: [".aeef/handoffs", ".aeef/runs/audit.log"]
+    }' > .aeef/runs/gate-decision.json
 
   exit 0
 fi

@@ -1,0 +1,29 @@
+{
+  "run_id": "run-2026-03-01T00-00-00Z",
+  "agent_id": "developer-agent",
+  "runtime_version": "aeef-cli-v1",
+  "prompt_ref": "manual-session",
+  "tools_used": ["Read", "Write", "Bash"],
+  "skill_ids": ["aeef-gate", "aeef-handoff", "aeef-provenance"],
+  "gate_decisions": [
+    {
+      "gate_id": "gate-implementation",
+      "stage": "implementation",
+      "criteria_results": [
+        {
+          "criterion": "tests_run",
+          "passed": true,
+          "note": "Test evidence found"
+        }
+      ],
+      "decision": "pass",
+      "required_human_approver": null,
+      "evidence_refs": [".aeef/runs/audit.log"]
+    }
+  ],
+  "timestamps": {
+    "started_at": "2026-03-01T00:00:00Z",
+    "completed_at": "2026-03-01T00:30:00Z"
+  },
+  "artifact_refs": [".aeef/handoffs/handoff.json", ".aeef/provenance/record.json"]
+}
